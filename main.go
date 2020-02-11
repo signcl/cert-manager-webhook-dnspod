@@ -13,7 +13,6 @@ import (
 
 	"github.com/jetstack/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/jetstack/cert-manager/pkg/acme/webhook/cmd"
-	cmmeta_v1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 	"github.com/jetstack/cert-manager/pkg/issuer/acme/dns/util"
 
 	"github.com/kaelzhang/dnspod-go"
@@ -40,14 +39,18 @@ func main() {
 	)
 }
 
+type cachedDnspodClient struct {
+	Client        *dnspod.Client
+	SecretVersion string
+}
+
 // customDNSProviderSolver implements the provider-specific logic needed to
 // 'present' an ACME challenge TXT record for your own DNS provider.
 // To do so, it must implement the `github.com/jetstack/cert-manager/pkg/acme/webhook.Solver`
 // interface.
 type customDNSProviderSolver struct {
 	client *kubernetes.Clientset
-
-	dnspod map[int]*dnspod.Client
+	dnspod map[string]cachedDnspodClient
 }
 
 // customDNSProviderConfig is a structure that is used to decode into when
@@ -65,9 +68,8 @@ type customDNSProviderSolver struct {
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
 type customDNSProviderConfig struct {
-	APIID             int                         `json:"apiID"`
-	APITokenSecretRef cmmeta_v1.SecretKeySelector `json:"apiTokenSecretRef"`
-	TTL               *int                        `json:"ttl"`
+	APITokenSecretName string `json:"apiTokenSecretName"`
+	TTL                int    `json:"ttl"`
 }
 
 // Name is used as the name for this DNS solver when referencing it on the ACME
@@ -100,7 +102,7 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	recordAttributes := newTxtRecord(ch.ResolvedZone, ch.ResolvedFQDN, ch.Key, *cfg.TTL)
+	recordAttributes := newTxtRecord(ch.ResolvedZone, ch.ResolvedFQDN, ch.Key, cfg.TTL)
 	_, _, err = dnspodClient.Domains.CreateRecord(domainID, *recordAttributes)
 	if err != nil {
 		return fmt.Errorf("dnspod API call failed: %v", err)
@@ -165,42 +167,44 @@ func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stop
 		return err
 	}
 	c.client = cl
-
-	c.dnspod = make(map[int]*dnspod.Client)
+	c.dnspod = make(map[string]cachedDnspodClient)
 
 	return nil
 }
 
 func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg customDNSProviderConfig) (*dnspod.Client, error) {
-	apiID := cfg.APIID
-	dnspodClient, ok := c.dnspod[apiID]
-	if !ok {
-		ref := cfg.APITokenSecretRef
-
-		secret, err := c.client.CoreV1().Secrets(ch.ResourceNamespace).Get(ref.Name, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
-		}
-
-		apiToken, ok := secret.Data[ref.Key]
+	cached, ok := c.dnspod[cfg.APITokenSecretName]
+	secret, err := c.client.CoreV1().Secrets(ch.ResourceNamespace).Get(cfg.APITokenSecretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if !ok || cached.SecretVersion != secret.ResourceVersion {
+		apiId, ok := secret.Data["id"]
 		if !ok {
-			return nil, fmt.Errorf("no api token for %q in secret '%s/%s'", ref.Name, ref.Key, ch.ResourceNamespace)
+			return nil, fmt.Errorf("no `id` in secret '%s/%s'", ch.ResourceNamespace, cfg.APITokenSecretName)
+		}
+		apiToken, ok := secret.Data["token"]
+		if !ok {
+			return nil, fmt.Errorf("no `token` in secret '%s/%s'", ch.ResourceNamespace, cfg.APITokenSecretName)
 		}
 
-		key := fmt.Sprintf("%d,%s", cfg.APIID, apiToken)
+		key := fmt.Sprintf("%s,%s", apiId, apiToken)
 		params := dnspod.CommonParams{LoginToken: key, Format: "json"}
-		dnspodClient = dnspod.NewClient(params)
-		c.dnspod[cfg.APIID] = dnspodClient
+		dnspodClient := dnspod.NewClient(params)
+		cached = cachedDnspodClient{
+			Client:        dnspodClient,
+			SecretVersion: secret.ResourceVersion,
+		}
+		c.dnspod[cfg.APITokenSecretName] = cached
 	}
 
-	return dnspodClient, nil
+	return cached.Client, nil
 }
 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
-	ttl := defaultTTL
-	cfg := customDNSProviderConfig{TTL: &ttl}
+	cfg := customDNSProviderConfig{APITokenSecretName: "dnspod-credential", TTL: defaultTTL}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
 		return cfg, nil

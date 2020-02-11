@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	zone = os.Getenv("TEST_ZONE_NAME")
+	zone  = os.Getenv("TEST_ZONE_NAME")
 	group = os.Getenv("GROUP_NAME")
 )
 
@@ -20,7 +20,7 @@ func TestRunsSuite(t *testing.T) {
 		dns.SetResolvedZone(zone),
 		dns.SetAllowAmbientCredentials(false),
 		dns.SetManifestPath("testdata/my-custom-solver"),
-		dns.SetBinariesPath("__main__/hack/bin"),
+		dns.SetBinariesPath("_out/kubebuilder/bin"),
 	)
 
 	fixture.RunConformance(t)

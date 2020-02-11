@@ -1,25 +1,14 @@
-FROM golang:1.13.4-alpine3.10 AS build_deps
-
-RUN apk add --no-cache git
-
+FROM golang:1.13-buster AS build_deps
 WORKDIR /workspace
 ENV GO111MODULE=on
-
+RUN apt install git
 COPY go.mod .
 COPY go.sum .
-
 RUN go mod download
-
-FROM build_deps AS build
-
 COPY . .
-
 RUN CGO_ENABLED=0 go build -o webhook -ldflags '-w -extldflags "-static"' .
 
-FROM alpine:3.10
-
-RUN apk add --no-cache ca-certificates
-
-COPY --from=build /workspace/webhook /usr/local/bin/webhook
-
+FROM ubuntu:18.04
+RUN apt update && apt-get -y install ca-certificates
+COPY --from=0 /workspace/webhook /usr/local/bin/webhook
 ENTRYPOINT ["webhook"]
