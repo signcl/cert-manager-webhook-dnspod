@@ -133,7 +133,7 @@ spec:
       serviceAccountName: cert-manager-webhook-dnspod
       containers:
         - name: cert-manager-webhook-dnspod
-          image: "openbayes/cert-manager-webhook-dnspod:1.0.1"
+          image: "openbayes/cert-manager-webhook-dnspod:v1.0.0"
           imagePullPolicy: IfNotPresent
           args:
           - --tls-cert-file=/tls/tls.crt
