@@ -1,4 +1,7 @@
 {
-  "apiTokenSecretName": "dnspod-credentials",
+  "apiTokenSecret": {
+    "name": "dnspod-credentials",
+    "namespace": "serving"
+  },
   "ttl": 600
 }

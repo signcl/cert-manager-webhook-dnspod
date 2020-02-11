@@ -53,6 +53,11 @@ type customDNSProviderSolver struct {
 	dnspod map[string]cachedDnspodClient
 }
 
+type apiTokenSecretRef struct {
+	name      string
+	namespace string
+}
+
 // customDNSProviderConfig is a structure that is used to decode into when
 // solving a DNS01 challenge.
 // This information is provided by cert-manager, and may be a reference to
@@ -68,8 +73,8 @@ type customDNSProviderSolver struct {
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
 type customDNSProviderConfig struct {
-	APITokenSecretName string `json:"apiTokenSecretName"`
-	TTL                int    `json:"ttl"`
+	APITokenSecret apiTokenSecretRef `json:"apiTokenSecret"`
+	TTL            int               `json:"ttl"`
 }
 
 // Name is used as the name for this DNS solver when referencing it on the ACME
@@ -173,19 +178,23 @@ func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stop
 }
 
 func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg customDNSProviderConfig) (*dnspod.Client, error) {
-	cached, ok := c.dnspod[cfg.APITokenSecretName]
-	secret, err := c.client.CoreV1().Secrets(ch.ResourceNamespace).Get(cfg.APITokenSecretName, metav1.GetOptions{})
+	secretNS := cfg.APITokenSecret.namespace
+	secretName := cfg.APITokenSecret.name
+	secretFQN := fmt.Sprintf("%s/%s", secretNS, secretName)
+
+	cached, ok := c.dnspod[secretFQN]
+	secret, err := c.client.CoreV1().Secrets(secretNS).Get(secretName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	if !ok || cached.SecretVersion != secret.ResourceVersion {
 		apiId, ok := secret.Data["id"]
 		if !ok {
-			return nil, fmt.Errorf("no `id` in secret '%s/%s'", ch.ResourceNamespace, cfg.APITokenSecretName)
+			return nil, fmt.Errorf("no `id` in secret '%s'", secretFQN)
 		}
 		apiToken, ok := secret.Data["token"]
 		if !ok {
-			return nil, fmt.Errorf("no `token` in secret '%s/%s'", ch.ResourceNamespace, cfg.APITokenSecretName)
+			return nil, fmt.Errorf("no `token` in secret '%s'", secretFQN)
 		}
 
 		key := fmt.Sprintf("%s,%s", apiId, apiToken)
@@ -195,7 +204,7 @@ func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg c
 			Client:        dnspodClient,
 			SecretVersion: secret.ResourceVersion,
 		}
-		c.dnspod[cfg.APITokenSecretName] = cached
+		c.dnspod[secretFQN] = cached
 	}
 
 	return cached.Client, nil
@@ -204,7 +213,13 @@ func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg c
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
-	cfg := customDNSProviderConfig{APITokenSecretName: "dnspod-credentials", TTL: defaultTTL}
+	cfg := customDNSProviderConfig{
+		APITokenSecret: apiTokenSecretRef{
+			name:      "dnspod-credentials",
+			namespace: "default",
+		},
+		TTL: defaultTTL,
+	}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
 		return cfg, nil
