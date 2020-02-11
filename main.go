@@ -78,7 +78,7 @@ type customDNSProviderConfig struct {
 // solvers configured with the same Name() **so long as they do not co-exist
 // within a single webhook deployment**.
 func (c *customDNSProviderSolver) Name() string {
-	return "dnspod"
+	return "dnspodchallenger"
 }
 
 // Present is responsible for actually presenting the DNS record with the
@@ -204,7 +204,7 @@ func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg c
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
-	cfg := customDNSProviderConfig{APITokenSecretName: "dnspod-credential", TTL: defaultTTL}
+	cfg := customDNSProviderConfig{APITokenSecretName: "dnspod-credentials", TTL: defaultTTL}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
 		return cfg, nil

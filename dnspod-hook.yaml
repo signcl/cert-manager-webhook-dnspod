@@ -15,7 +15,7 @@ metadata:
     app: cert-manager-webhook-dnspod
 rules:
 - apiGroups:
-  - dnspod-resolver.acme.openbayes.com
+  - acme.openbayes.com
   resources:
   - '*'
   verbs:
@@ -143,7 +143,7 @@ spec:
           - --tls-private-key-file=/tls/tls.key
           env:
           - name: GROUP_NAME
-            value: "dnspod-resolver.acme.openbayes.com"
+            value: "acme.openbayes.com"
           ports:
           - name: https
             containerPort: 443
@@ -171,19 +171,19 @@ spec:
 apiVersion: apiregistration.k8s.io/v1beta1
 kind: APIService
 metadata:
-  name: v1alpha2.dnspod-resolver.acme.openbayes.com
+  name: v1alpha1.acme.openbayes.com
   labels:
     app: cert-manager-webhook-dnspod
   annotations:
     cert-manager.io/inject-ca-from: "cert-manager/cert-manager-webhook-dnspod-webhook-tls"
 spec:
-  group: dnspod-resolver.acme.openbayes.com
+  group: acme.openbayes.com
   groupPriorityMinimum: 1000
   versionPriority: 15
   service:
     name: cert-manager-webhook-dnspod
     namespace: cert-manager
-  version: v1alpha2
+  version: v1alpha1
 ---
 apiVersion: cert-manager.io/v1alpha2
 kind: Certificate
