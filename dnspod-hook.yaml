@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: cert-manager-webhook-dnspod
+  namespace: cert-manager
   labels:
     app: cert-manager-webhook-dnspod
 ---
@@ -102,6 +103,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: cert-manager-webhook-dnspod
+  namespace: cert-manager
   labels:
     app: cert-manager-webhook-dnspod
 spec:
@@ -118,6 +120,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cert-manager-webhook-dnspod
+  namespace: cert-manager
   labels:
     app: cert-manager-webhook-dnspod
 spec:
