@@ -54,8 +54,8 @@ type customDNSProviderSolver struct {
 }
 
 type apiTokenSecretRef struct {
-	name      string
-	namespace string
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 // customDNSProviderConfig is a structure that is used to decode into when
@@ -178,8 +178,11 @@ func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stop
 }
 
 func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg customDNSProviderConfig) (*dnspod.Client, error) {
-	secretNS := cfg.APITokenSecret.namespace
-	secretName := cfg.APITokenSecret.name
+	secretNS := cfg.APITokenSecret.Namespace
+	secretName := cfg.APITokenSecret.Name
+	if secretNS == "" {
+		secretNS = ch.ResourceNamespace
+	}
 	secretFQN := fmt.Sprintf("%s/%s", secretNS, secretName)
 
 	cached, ok := c.dnspod[secretFQN]
@@ -215,8 +218,8 @@ func (c *customDNSProviderSolver) getDNSPod(ch *v1alpha1.ChallengeRequest, cfg c
 func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
 	cfg := customDNSProviderConfig{
 		APITokenSecret: apiTokenSecretRef{
-			name:      "dnspod-credentials",
-			namespace: "default",
+			Name:      "dnspod-credentials",
+			Namespace: "default",
 		},
 		TTL: defaultTTL,
 	}
@@ -227,7 +230,6 @@ func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
 	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
 		return cfg, fmt.Errorf("error decoding solver config: %v", err)
 	}
-
 	return cfg, nil
 }
 
@@ -265,11 +267,12 @@ func newTxtRecord(zone, fqdn, value string, ttl int) *dnspod.Record {
 	name := extractRecordName(fqdn, zone)
 
 	return &dnspod.Record{
-		Type:  "TXT",
-		Name:  name,
-		Value: value,
-		Line:  "默认",
-		TTL:   fmt.Sprintf("%d", ttl),
+		Type:   "TXT",
+		Name:   name,
+		Value:  value,
+		Line:   "默认",
+		Remark: "cert-manager DNS01 验证",
+		TTL:    fmt.Sprintf("%d", ttl),
 	}
 }
 
